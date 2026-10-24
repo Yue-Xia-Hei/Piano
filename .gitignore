@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.log
+
+# Local browser profiles (cookies, sessions and debugging data)
+chrome-review-profile/
+edge-review-profile/
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

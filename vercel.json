@@ -1,0 +1,1 @@
+{"rewrites":[{"source":"/3d","destination":"/"},{"source":"/3d/:path*","destination":"/"}]}
