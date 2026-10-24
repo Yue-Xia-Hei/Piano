@@ -2,7 +2,7 @@
 export class PerformanceTransport {
   constructor(engine, { onFrame = () => {}, onEnd = () => {} } = {}) {
     this.engine = engine; this.onFrame = onFrame; this.onEnd = onEnd;
-    this.notes = []; this.duration = 0; this.offset = 0; this.rate = 1; this.playing = false; this.voices = new Set();
+    this.notes = []; this.duration = 0; this.offset = 0; this.rate = 1; this.playing = false; this.voices = new Set(); this.activeByMidi = new Map();
   }
   load(notes, duration, original = null) {
     this.stop(); this.notes = notes; this.duration = duration; this.original = original;
@@ -23,8 +23,8 @@ export class PerformanceTransport {
     this.tick(); if (this.playing) this.timer = setInterval(() => this.tick(), 20);
   }
   schedule(note, when, elapsed = 0) {
-    const voice = this.engine.note(note.midi, { when, duration: (note.duration - elapsed) / this.rate, velocity: note.velocity, elapsed, speed: this.rate });
-    this.voices.add(voice); voice.onended = () => this.voices.delete(voice);
+    const previous = this.activeByMidi.get(note.midi); if (previous && previous.endTime > when) previous.releaseAt?.(when); const duration = (note.duration - elapsed) / this.rate; const voice = this.engine.note(note.midi, { when, duration, velocity: note.velocity, elapsed, speed: this.rate }); voice.endTime = when + duration; this.activeByMidi.set(note.midi, voice);
+    this.voices.add(voice); voice.onended = () => { this.voices.delete(voice); if (this.activeByMidi.get(note.midi) === voice) this.activeByMidi.delete(note.midi); };
   }
   tick() {
     if (!this.playing) return;
@@ -40,7 +40,7 @@ export class PerformanceTransport {
   }
   pause() {
     this.offset = this.position(); this.playing = false; clearInterval(this.timer);
-    for (const voice of this.voices) voice.stop(); this.voices.clear();
+    for (const voice of this.voices) voice.stop(); this.voices.clear(); this.activeByMidi.clear();
     this.originalVoice?.stop(); this.originalVoice = null;
   }
   stop() { this.pause(); this.offset = 0; }

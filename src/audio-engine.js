@@ -37,10 +37,10 @@ export class PianoAudio {
     const offset = Math.min(Math.max(0, elapsed * pitchRate), Math.max(0, buffer.duration - .02));
     source.start(when, offset);
     let stopped = false;
-    const voice = { onended: null, stop: () => { if (stopped) return; stopped = true; try { source.stop(); } catch {} }, release: () => {
+    const releaseAt = at => { if (stopped) return; const start = Math.max(this.context.currentTime, at); gain.gain.cancelAndHoldAtTime(start); gain.gain.linearRampToValueAtTime(0, start + .075); }; const voice = { onended: null, endTime: 0, stop: () => { if (stopped) return; stopped = true; try { source.stop(); } catch {} }, releaseAt, release: () => {
       if (stopped) return;
-      const at = this.context.currentTime; gain.gain.cancelAndHoldAtTime(at); gain.gain.linearRampToValueAtTime(0, at + .14);
-      try { source.stop(at + .15); } catch {}
+      const at = this.context.currentTime; releaseAt(at);
+      try { source.stop(at + .09); } catch {}
     } };
     if (duration !== null) {
       const end = when + Math.max(.012, duration);

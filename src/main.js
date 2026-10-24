@@ -929,6 +929,28 @@ async function runMidi() {
   } catch (error) { practiceStatus.textContent = error.message; }
   finally { if (request === startRequest) midiPlay.disabled = playbackMode.value === 'practice' || !transport.duration; }
 }
+async function togglePianoPlayback() {
+  if (!transport.duration || !performanceNotes.length) return;
+  if (midiPlaying && playbackMode.value === 'piano') {
+    startRequest++;
+    transport.pause();
+    midiPlaying = false;
+    midiPlay.textContent = '继续';
+    resetKeyVisuals();
+    practiceStatus.textContent = '钢琴还原已暂停 · 再按 F2 继续';
+    return;
+  }
+  startRequest++;
+  transport.pause();
+  midiPlaying = false;
+  releaseManualKeys();
+  resetKeyVisuals();
+  practicePending.clear();
+  lastPlaybackIndex = -1;
+  playbackMode.value = 'piano';
+  midiPlay.disabled = false;
+  await runMidi();
+}
 function imageCanvas(file) { return new Promise((resolve,reject)=>{ const image=new Image(), url=URL.createObjectURL(file); image.onload=()=>{const scale=Math.min(1,2200/image.width,3000/image.height),c=document.createElement('canvas');c.width=Math.round(image.width*scale);c.height=Math.round(image.height*scale);c.getContext('2d').drawImage(image,0,0,c.width,c.height);URL.revokeObjectURL(url);resolve(c);};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('图片无法读取'));};image.src=url;}); }
 async function loadScoreCanvas(file) { if(file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf')) {const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise,page=await pdf.getPage(1),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(2,2000/base.width)}),c=document.createElement('canvas');c.width=Math.ceil(viewport.width);c.height=Math.ceil(viewport.height);await page.render({canvas:c,canvasContext:c.getContext('2d'),viewport}).promise;return c;} if(!file.type.startsWith('image/'))throw new Error('请选择 PDF 或图片');return imageCanvas(file);}
 function readMelody(canvas) {const {width:w,height:h}=canvas,ctx=canvas.getContext('2d',{willReadFrequently:true}),data=ctx.getImageData(0,0,w,h).data,dark=new Uint8Array(w*h);for(let i=0;i<dark.length;i++){const j=i*4;dark[i]=(data[j]*.299+data[j+1]*.587+data[j+2]*.114)<100?1:0;}const rows=[];for(let y=0;y<h;y++){let count=0;for(let x=0;x<w;x++)count+=dark[y*w+x];if(count>w*.32)rows.push(y);}const bands=[];for(const y of rows){if(!bands.length||y-bands.at(-1).at(-1)>2)bands.push([y]);else bands.at(-1).push(y);}const lines=bands.filter(b=>b.length<5).map(b=>Math.round(b.reduce((a,v)=>a+v,0)/b.length));let staff=null;for(let i=0;i+4<lines.length;i++){const a=lines.slice(i,i+5),g=a.slice(1).map((v,j)=>v-a[j]),avg=g.reduce((x,y)=>x+y,0)/4;if(g.every(v=>v>avg*.7&&v<avg*1.3)){staff={top:a[0],bottom:a[4],gap:avg};break;}}if(!staff)throw new Error('未找到五线谱；请使用清晰的印刷单页谱');const step=staff.gap/2,candidates=[];for(let y=Math.max(0,staff.top-staff.gap*3);y<Math.min(h,staff.bottom+staff.gap*2);y+=Math.max(2,Math.floor(step*.55)))for(let x=Math.floor(w*.12)+4;x<w*.96-4;x+=3){let n=0;for(let yy=Math.max(0,y-3);yy<=Math.min(h-1,y+3);yy++)for(let xx=x-4;xx<=x+4;xx++)n+=dark[yy*w+xx];if(n>30&&!candidates.some(q=>Math.abs(q.x-x)<w*.012&&Math.abs(q.y-y)<step))candidates.push({x,y});}const notes=[];for(const c of candidates.sort((a,b)=>a.x-b.x)){const d=Math.round((staff.bottom-c.y)/step),oct=4+Math.floor((d+2)/7),idx=((d+2)%7+7)%7,midi=[64,65,67,69,71,72,74][idx]+12*(oct-4);if(midi>=48&&midi<=88&&(!notes.length||notes.at(-1).midi!==midi))notes.push({midi,time:notes.length*.6,duration:.55});}if(notes.length<4)throw new Error('未能可靠定位音符。当前支持清晰的高音谱表单旋律；复杂钢琴谱建议先转 MIDI。');return notes;}
@@ -1089,12 +1111,12 @@ function enterManualPractice() {
 }
 async function play(midi, { advance = true, duration = .65, held = null } = {}) {
   const key = noteToMesh.get(midi); if (!key) return;
-  if (advance) enterManualPractice();
+  if (advance && playbackMode.value === 'practice') enterManualPractice();
   key.position.y = key.userData.baseY - key.userData.travel;
   clearTimeout(key.userData.timer);
   if (!held) key.userData.timer = setTimeout(() => { key.position.y = key.userData.baseY; }, duration * 1000);
   document.querySelector('#hint').classList.add('gone'); showKey(key);
-  if (advance) {
+  if (advance && playbackMode.value === 'practice') {
     if (chordMode.value === 'simultaneous' && !held) practiceStatus.textContent = '同时模式请使用键盘按住和弦；鼠标练习可切换为依次按齐';
     else advancePractice(midi);
   }
@@ -1111,9 +1133,16 @@ function releaseManualKeys() {
   heldKeys.clear();
 }
 window.addEventListener('keydown', e => {
+  if (e.code === 'F2') {
+    if (!e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
+      e.preventDefault();
+      togglePianoPlayback();
+    }
+    return;
+  }
   if (e.repeat || e.altKey || e.ctrlKey || e.metaKey || ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable) return;
   const index = codes.indexOf(e.code); if (index < 0 || heldKeys.has(e.code)) return;
-  e.preventDefault(); enterManualPractice();
+  e.preventDefault();
   const held = { midi: 21 + index + (e.shiftKey ? codes.length : 0), pressedAt: performance.now(), released: false };
   heldKeys.set(e.code, held); play(held.midi, { held });
 });

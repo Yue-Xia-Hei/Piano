@@ -14,16 +14,16 @@ const fs=require('node:fs');
  const snap=()=>page.evaluate(()=>window.__performanceReview.snapshot);
  const chord=[24,28,68,72]; // Digit4, Digit8, Shift+4, Shift+8 (44 keys per bank)
  const codes=await page.evaluate(()=>window.__performanceReview.codes);chord[2]=24+codes.length;chord[3]=28+codes.length;
- await load([...chord.map(m=>note(m)),note(60,1)]);
+ await load([...chord.map(m=>note(m)),note(60,1)]);await page.selectOption('#playbackMode','practice');
  await page.keyboard.press('Digit4');await page.keyboard.press('Digit8');assert.equal((await snap()).index,0);assert.equal((await snap()).pending.length,2);
  await page.keyboard.press('Shift+Digit4');await page.keyboard.press('Shift+Digit8');assert.equal((await snap()).index,1);
  // Releasing Shift before the note key must still release its original pitch.
  await page.keyboard.down('Shift');await page.keyboard.down('Digit4');await page.keyboard.up('Shift');await page.keyboard.up('Digit4');assert.equal((await snap()).held.length,0);
  // A button keeping focus must not swallow piano keys.
- await load([note(24),note(28,1)]);await page.locator('#restart').focus();await page.keyboard.press('Digit4');assert.equal((await snap()).index,1);
+ await load([note(24),note(28,1)]);await page.selectOption('#playbackMode','practice');await page.locator('#restart').focus();await page.keyboard.press('Digit4');assert.equal((await snap()).index,1);
  // Simultaneous mode rejects long intervals and accepts a held chord.
  await page.locator('#scoreOptions').click();await page.selectOption('#chordMode','simultaneous');await page.locator('#closeScoreSettings').click();
- await load([note(24),note(28),note(60,1)]);await page.locator('#restart').focus();await page.keyboard.down('Digit4');await page.waitForTimeout(220);await page.keyboard.down('Digit8');assert.equal((await snap()).index,0);assert.match(await page.locator('#practiceStatus').textContent(),/180ms/);await page.keyboard.up('Digit4');await page.keyboard.up('Digit8');await page.keyboard.down('Digit4');await page.keyboard.down('Digit8');assert.equal((await snap()).index,1);await page.keyboard.up('Digit4');await page.keyboard.up('Digit8');
+ await load([note(24),note(28),note(60,1)]);await page.selectOption('#playbackMode','practice');await page.locator('#restart').focus();await page.keyboard.down('Digit4');await page.waitForTimeout(220);await page.keyboard.down('Digit8');assert.equal((await snap()).index,0);assert.match(await page.locator('#practiceStatus').textContent(),/180ms/);await page.keyboard.up('Digit4');await page.keyboard.up('Digit8');await page.keyboard.down('Digit4');await page.keyboard.down('Digit8');assert.equal((await snap()).index,1);await page.keyboard.up('Digit4');await page.keyboard.up('Digit8');
  await page.locator('#scoreOptions').click();await page.selectOption('#chordMode','collect');await page.locator('#closeScoreSettings').click();
  const dimensions=()=>page.locator('.practice-hud').boundingBox();
  await load([note(60)]);const simple=await dimensions();
